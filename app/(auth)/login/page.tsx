@@ -1,18 +1,28 @@
 'use client'
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
 import { LoginForm } from "@/components/auth/login-form"
 
 export default function LoginPage() {
-  const { user} = useAuth()
+  const { user, loading } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
-    if (user) {
+    // Only redirect if not loading and not already on reports page
+    if (!loading && user && pathname !== '/reports') {
       router.replace('/reports')
     }
-  }, [user])
+  }, [user, loading, router, pathname])
+
+  if (loading) {
+    return <div>Loading...</div>
+  }
+
+  if (user) {
+    return null
+  }
 
   return (
     <div className="container flex h-screen w-screen flex-col items-center justify-center">

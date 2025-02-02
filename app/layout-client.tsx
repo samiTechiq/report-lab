@@ -1,25 +1,21 @@
 'use client'
 
-import { Toaster } from "@/components/ui/toaster";
-import { Inter as FontSans } from "next/font/google";
-import "./globals.css";
-import { cn } from "@/lib/utils";
-import { Providers } from "@/components/providers";
+import { Inter as FontSans } from "next/font/google"
+import { cn } from "@/lib/utils"
+import { Providers } from "@/components/providers"
 
 const fontSans = FontSans({
   subsets: ["latin"],
   variable: "--font-sans",
-});
+})
 
-
-
-export default function RootLayout({
+export function ClientLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#000000" />
@@ -51,20 +47,11 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={fontSans.variable} suppressHydrationWarning>
+      <body className={cn("min-h-screen bg-background font-sans antialiased", fontSans.variable)}>
         <Providers>
-          <Toaster />
           {children}
         </Providers>
       </body>
     </html>
-  );
-}
-
-export function ClientComponent({ children }: { children: React.ReactNode }) {
-  return (
-    <div className={cn("min-h-screen bg-background font-sans antialiased", fontSans.variable)}>
-      {children}
-    </div>
-  );
+  )
 }
