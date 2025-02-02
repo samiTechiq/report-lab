@@ -61,12 +61,12 @@ export function LoginForm() {
 	}
 
 	return (
-		<div className="p-4 md:border md:rounded-lg">
+		<div className="p-4 mx-4 border rounded-lg">
 			<h2 className="text-2xl font-bold mb-4">Login</h2>
 			<form onSubmit={onSubmit} className="space-y-4">
 				<div className="grid gap-2">
 					<div className="grid gap-1">
-						<div className="relative">
+						<div className="relative mb-4">
 							<Input
 								id="email"
 								placeholder="name@gmail.com"
