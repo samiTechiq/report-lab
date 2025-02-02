@@ -57,7 +57,7 @@ export function ReportsDataTable() {
       setHasMore(result.reports.length === ITEMS_PER_PAGE);
       return result;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: Infinity,
     placeholderData: (previousData) => previousData
   })
 
