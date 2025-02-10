@@ -149,6 +149,9 @@ export function CreateReportDialog() {
                     </FormItem>
                   )}
                 />
+                <div className="my-4 border-b border-gray-300">
+                  <h1 className="text-sm font-semibold">Kg Information</h1>
+                </div>
                 <FormField
                   control={form.control}
                   name="opening_kg"
@@ -229,7 +232,9 @@ export function CreateReportDialog() {
                     </FormItem>
                   )}
                 />
-
+                <div className="my-4 border-b border-gray-300">
+                  <h1 className="text-sm font-semibold">Product Information</h1>
+                </div>
                 <FormField
                   control={form.control}
                   name="opening_bag"
@@ -299,7 +304,11 @@ export function CreateReportDialog() {
                     </FormItem>
                   )}
                 />
-
+                <div className="my-4 border-b border-gray-300">
+                  <h1 className="text-sm font-semibold">
+                    Packing Bag Information
+                  </h1>
+                </div>
                 <FormField
                   control={form.control}
                   name="opening_stock"
