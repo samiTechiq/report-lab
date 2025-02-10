@@ -1,5 +1,5 @@
-import { Report } from "@/types";
-import { formatNumber, subStr } from "./utils";
+import { Report } from "@/types/report";
+import { subStr } from "./utils";
 
 export const generateReportImage = async (report: Report): Promise<string> => {
   // Create a canvas element
@@ -9,7 +9,7 @@ export const generateReportImage = async (report: Report): Promise<string> => {
 
   // Set canvas dimensions
   canvas.width = 500;
-  canvas.height = 600;
+  canvas.height = 750;
 
   // Set background
   ctx.fillStyle = "#ffffff";
@@ -25,10 +25,10 @@ export const generateReportImage = async (report: Report): Promise<string> => {
 
   // Helper function to format date
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   };
 
@@ -39,13 +39,17 @@ export const generateReportImage = async (report: Report): Promise<string> => {
     { label: "Additional KG", value: report.additional_kg },
     { label: "KG Used", value: report.kg_used },
     { label: "Closing KG", value: report.closing_kg },
+    { label: "Each kg produced", value: report?.each_kg_produced },
     { label: "Opening Bag", value: report.opening_bag },
     { label: "Bag Produced", value: report.bag_produced },
     { label: "Bag Sold", value: report.bag_sold },
     { label: "Closing Bag", value: report.closing_bag },
     { label: "Missing Bag", value: report.missing_bag },
+    { label: "Damage Bag", value: report?.damage_stock },
     { label: "Location", value: report.location },
-    { label: "Recorded By", value: subStr(report.recorded_by, 25)}
+    { label: "Sales Rep", value: report.sales_rep },
+    { label: "Supervisor", value: report.supervisor },
+    { label: "Recorded By", value: subStr(report.recorded_by, 25) },
   ];
 
   // Layout configuration
@@ -60,7 +64,7 @@ export const generateReportImage = async (report: Report): Promise<string> => {
 
   // Draw fields
   fields.forEach((field, index) => {
-    const y = startY + (index * lineHeight);
+    const y = startY + index * lineHeight;
 
     // Draw label (right-aligned)
     ctx.font = "bold 16px Arial";
@@ -74,12 +78,13 @@ export const generateReportImage = async (report: Report): Promise<string> => {
     ctx.fillText(`${field.value}`, valueX, y);
 
     // Draw separator line
-    if (index < fields.length - 1) { // Don't draw line after last item
+    if (index < fields.length - 1) {
+      // Don't draw line after last item
       ctx.beginPath();
       ctx.strokeStyle = separatorColor;
       ctx.lineWidth = 1;
-      ctx.moveTo(leftMargin, y + (lineHeight / 2));
-      ctx.lineTo(canvas.width - rightMargin, y + (lineHeight / 2));
+      ctx.moveTo(leftMargin, y + lineHeight / 2);
+      ctx.lineTo(canvas.width - rightMargin, y + lineHeight / 2);
       ctx.stroke();
     }
   });
@@ -96,12 +101,14 @@ export const generateReportImage = async (report: Report): Promise<string> => {
 export const downloadReportImage = async (report: Report) => {
   try {
     const dataUrl = await generateReportImage(report);
-    
+
     // Create download link
     const link = document.createElement("a");
-    link.download = `report-${report.id}-${new Date().toISOString().split('T')[0]}.png`;
+    link.download = `report-${report.id}-${
+      new Date().toISOString().split("T")[0]
+    }.png`;
     link.href = dataUrl;
-    
+
     // Trigger download
     document.body.appendChild(link);
     link.click();

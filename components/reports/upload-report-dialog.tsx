@@ -85,11 +85,20 @@ export function UploadReportDialog() {
             'additional_kg',
             'kg_used',
             'closing_kg',
+            'each_kg_produced',
             'opening_bag',
             'bag_produced',
             'bag_sold',
             'closing_bag',
             'missing_bag',
+            'opening_stock',
+            'additional_stock',
+            'stock_used',
+            'damage_stock',
+            'closing_stock',
+            'missing_stock',
+            'sales_rep',
+            'supervisor',
             'location'
           ]
 
@@ -115,11 +124,18 @@ export function UploadReportDialog() {
                 'additional_kg',
                 'kg_used',
                 'closing_kg',
+                'each_kg_produced',
                 'opening_bag',
                 'bag_produced',
                 'bag_sold',
                 'closing_bag',
-                'missing_bag'
+                'missing_bag',
+                'opening_stock',
+                'additional_stock',
+                'stock_used',
+                'damage_stock',
+                'closing_stock',
+                'missing_stock'
               ]
               
               numericFields.forEach(field => {
@@ -226,11 +242,20 @@ export function UploadReportDialog() {
       additional_kg: "50.00",
       kg_used: "75.00",
       closing_kg: "75.00",
+      each_kg_produced: "25.00",
       opening_bag: "200.00",
       bag_produced: "150.00",
       bag_sold: "100.00",
       closing_bag: "250.00",
       missing_bag: "0.00",
+      opening_stock: "1000.00",
+      additional_stock: "500.00",
+      stock_used: "750.00",
+      damage_stock: "10.00",
+      closing_stock: "740.00",
+      missing_stock: "0.00",
+      sales_rep: "John Doe",
+      supervisor: "Jane Smith",
       location: "extension"
     }
 
@@ -345,11 +370,20 @@ export function UploadReportDialog() {
               <li>additional_kg (number)</li>
               <li>kg_used (number)</li>
               <li>closing_kg (number)</li>
+              <li>each_kg_produced (number)</li>
               <li>opening_bag (number)</li>
               <li>bag_produced (number)</li>
               <li>bag_sold (number)</li>
               <li>closing_bag (number)</li>
               <li>missing_bag (number)</li>
+              <li>opening_stock (number)</li>
+              <li>additional_stock (number)</li>
+              <li>stock_used (number)</li>
+              <li>damage_stock (number)</li>
+              <li>closing_stock (number)</li>
+              <li>missing_stock (number)</li>
+              <li>sales_rep (text)</li>
+              <li>supervisor (text)</li>
               <li>location (extension, newsite, or oldsite)</li>
             </ul>
           </div>

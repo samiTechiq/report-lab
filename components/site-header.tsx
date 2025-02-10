@@ -44,6 +44,18 @@ export function SiteHeader() {
               >
                 Reports
               </Link>
+              <Link
+                href="/users"
+                className="transition-colors hover:text-foreground/80"
+              >
+                Users
+              </Link>
+              <Link
+                href="/supervisors"
+                className="transition-colors hover:text-foreground/80"
+              >
+                Supervisors
+              </Link>
             </nav>
            </div>
           )}

@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Report } from "@/types"
+import { Report } from "@/types/report"
 import { reportService } from "@/lib/report-service"
 import { useAuth } from "@/context/auth-context"
 import { CreateReportDialog } from "@/components/reports/create-report-dialog"
@@ -142,11 +142,11 @@ export function ReportsDataTable() {
             <div className="text-sm font-medium text-muted-foreground">KG Information</div>
               <div className="flex justify-between items-center text-sm">
                 <span className="font-medium">Opening:</span>
-                <span className="ml-2">{formatNumber(report.opening_kg)}</span>
+                <span className="ml-2">{formatNumber(report?.opening_kg)}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="font-medium">Additional:</span>
-                <span className="ml-2">{formatNumber(report.additional_kg)}</span>
+                <span className="ml-2">{formatNumber(report?.additional_kg)}</span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="font-medium">Used:</span>

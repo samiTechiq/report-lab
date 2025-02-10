@@ -1,10 +1,8 @@
 'use client'
 
-import { useEffect } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import { AuthProvider, useAuth } from "@/context/auth-context"
 import { SiteHeader } from "@/components/site-header"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { useEffect } from "react"
 
 const queryClient = new QueryClient()
 
@@ -22,6 +20,17 @@ function DashboardContent({ children }: props) {
 }
 
 export default function DashboardLayout({ children}: props) {
+  useEffect(() => {
+    const handleWheel = (event: Event) => {
+        const target = event.target as HTMLInputElement;
+        if (target.type === "number") {
+            target.blur();
+        }
+    };
+
+    document.addEventListener("wheel", handleWheel);
+    return () => document.removeEventListener("wheel", handleWheel);
+}, []);
   return (
       <QueryClientProvider client={queryClient}>
       <DashboardContent>

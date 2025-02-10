@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { getFirebaseAuthErrorMessage, STORAGE_KEY } from "@/lib/utils";
 import { signInWithEmailAndPassword } from "@firebase/auth";
 import { auth } from "@/lib/firebase";
+import { userService } from "@/lib/services/user-service";
 import Cookies from "js-cookie";
 import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 
@@ -36,26 +37,49 @@ export function LoginForm() {
 		setError(null);
 		setIsLoading(true);
 		try {
+			// First authenticate with Firebase
 			const result = await signInWithEmailAndPassword(
 				auth,
 				email,
 				password
 			);
+
+			// First set the Firebase user
+			setUser(result.user);
+
+			// Then fetch the user info from our users collection
+			const userInfo = await userService.getUserByEmail(email);
+			
+			if (!userInfo) {
+				setError("User not found in the system. Please contact an administrator.");
+				throw new Error("User not found in the system. Please contact an administrator.");
+			}
+
+			if (userInfo.status === 'inactive') {
+				setError("Your account is inactive. Please contact an administrator.");
+				throw new Error("Your account is inactive. Please contact an administrator.");
+			}
+
+			// Then handle your custom user data separately
 			const userData = {
-				uid: result.user?.uid,
+				id: result.user?.uid,
 				email: result.user?.email,
-				displayName: result.user?.displayName,
-				photoURL: result.user?.photoURL,
+				name: userInfo.name,
+				role: userInfo.role,
+				status: userInfo.status,
+				createdAt: new Date(),
+				updatedAt: new Date(),
 			};
+
+			// Store the custom user data
 			Cookies.set(STORAGE_KEY, JSON.stringify(userData), { expires: 7 });
 			localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-			setUser(result.user);
-			router.replace("/reports");
+			router.push("/reports");
 		} catch (error: any) {
-			const errorCode = error.code;
-			const errorMessage = getFirebaseAuthErrorMessage(errorCode);
-			setError(errorMessage);
-		} finally {
+			console.error("Login error:", error);
+			setError(
+				getFirebaseAuthErrorMessage(error.code) || error.message
+			);
 			setIsLoading(false);
 		}
 	}

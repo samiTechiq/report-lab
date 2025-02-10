@@ -1,432 +1,470 @@
-import { useState } from "react";
+"use client";
+
 import { Button } from "@/components/ui/button";
 import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogFooter,
-	DialogHeader,
-	DialogTitle,
-	DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import { reportService } from "@/lib/report-service";
+import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
-import { Spinner } from "@/components/ui/spinner";
-import { Plus } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { reportService } from "@/lib/report-service";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { ReportFormValues } from "@/types/report";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+import { supervisorService } from "@/lib/services/supervisor-service";
+import { ScrollArea } from "../ui/scroll-area";
 
 export function CreateReportDialog() {
-	const [open, setOpen] = useState(false);
-	const [isSubmitting, setIsSubmitting] = useState(false);
-	const { user } = useAuth();
-	const [formData, setFormData] = useState({
-		opening_kg: "0",
-		additional_kg: "0",
-		kg_used: "0",
-		closing_kg: "0",
-		opening_bag: "0",
-		bag_produced: "0",
-		bag_sold: "0",
-		closing_bag: "0",
-		missing_bag: "0",
-		location: "",
-		report_date: new Date().toISOString().split("T")[0],
-	});
-	const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!user?.email) return;
+  const form = useForm<ReportFormValues>({
+    defaultValues: {
+      opening_kg: 0,
+      additional_kg: 0,
+      kg_used: 0,
+      closing_kg: 0,
+      each_kg_produced: 0,
+      opening_bag: 0,
+      bag_produced: 0,
+      bag_sold: 0,
+      missing_bag: 0,
+      closing_bag: 0,
+      opening_stock: 0,
+      additional_stock: 0,
+      stock_used: 0,
+      damage_stock: 0,
+      closing_stock: 0,
+      missing_stock: 0,
+      recorded_by: "",
+      sales_rep: "",
+      supervisor: "",
+      location: "",
+      report_date: new Date(),
+    },
+  });
 
-		// Validate all required fields
-		if (!formData.location) {
-			toast({
-				title: "Error",
-				description: "Please select a location",
-				variant: "destructive",
-			});
-			return;
-		}
+  // Fetch supervisors for the select input
+  const { data: supervisors } = useQuery({
+    queryKey: ["supervisors"],
+    queryFn: supervisorService.getSupervisors,
+  });
 
-		// Check if any numeric field is empty or 0
-		const numericFields = [
-			"opening_kg",
-			"additional_kg",
-			"kg_used",
-			"closing_kg",
-			"opening_bag",
-			"bag_produced",
-			"bag_sold",
-			"closing_bag",
-			"missing_bag",
-		];
+  const onSubmit = async (data: ReportFormValues) => {
+    if (!user || !user.email) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to create a report",
+        variant: "destructive",
+      });
+      return;
+    }
 
-		for (const field of numericFields) {
-			if (!formData[field as keyof typeof formData]) {
-				toast({
-					title: "Error",
-					description: `Please enter a value for ${field.replace(
-						"_",
-						" "
-					)}`,
-					variant: "destructive",
-				});
-				return;
-			}
-		}
+    try {
+      await reportService.createReport({
+        ...data,
+        recorded_by: user.email,
+        updated_by: "",
+      });
 
-		setIsSubmitting(true);
-		try {
-			await reportService.createReport({
-				...formData,
-				recorded_by: user.email,
-				report_date: new Date(formData.report_date),
-				opening_kg: String(formData.opening_kg),
-				additional_kg: String(formData.additional_kg),
-				kg_used: String(formData.kg_used),
-				closing_kg: String(formData.closing_kg),
-				opening_bag: String(formData.opening_bag),
-				bag_produced: String(formData.bag_produced),
-				bag_sold: String(formData.bag_sold),
-				closing_bag: String(formData.closing_bag),
-			});
-			// Invalidate and refetch reports
-			queryClient.invalidateQueries({ queryKey: ["reports"] });
-			setOpen(false);
-			setFormData({
-				opening_kg: "0",
-				additional_kg: "0",
-				kg_used: "0",
-				closing_kg: "0",
-				opening_bag: "0",
-				bag_produced: "0",
-				bag_sold: "0",
-				closing_bag: "0",
-				missing_bag: "0",
-				location: "",
-				report_date: new Date().toISOString().split("T")[0],
-			});
-			toast({
-				title: "Success",
-				description: "Report created successfully",
-			});
-		} catch (error) {
-			console.error("Error creating report:", error);
-		} finally {
-			setIsSubmitting(false);
-		}
-	};
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      toast({
+        title: "Success",
+        description: "Report created successfully",
+      });
+      setOpen(false);
+      form.reset();
+    } catch (error) {
+      console.error("Error creating report:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create report",
+        variant: "destructive",
+      });
+    }
+  };
 
-	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const { name, value, type } = e.target;
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>Create Report</Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Create Report</DialogTitle>
+          <DialogDescription>
+            Create a new report with the form below
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <ScrollArea className="h-[400px] pr-4">
+              <div className="mx-4 mb-4">
+                <FormField
+                  control={form.control}
+                  name="report_date"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Report Date</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          required
+                          {...field}
+                          value={field.value.toISOString().split("T")[0] || ""}
+                          onChange={(e) => {
+                            field.onChange(
+                              e.target.value ? new Date(e.target.value) : ""
+                            );
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="opening_kg"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Opening Kg</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="additional_kg"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Additional Kg</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="kg_used"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kg used</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} required />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="closing_kg"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Closing Kg</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-		// For number inputs, only allow numeric values
-		if (type === "number") {
-			// Only update if the value is empty or a valid number
-			if (value === "" || /^\d*\.?\d*$/.test(value)) {
-				setFormData((prev) => ({
-					...prev,
-					[name]: value,
-				}));
-			}
-		} else {
-			setFormData((prev) => ({
-				...prev,
-				[name]: value,
-			}));
-		}
-	};
+                <FormField
+                  control={form.control}
+                  name="each_kg_produced"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Each Kg Produced</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-	return (
-		<Dialog open={open} onOpenChange={setOpen}>
-			<DialogTrigger asChild>
-				<Button>
-					<Plus className="h-4 text-center w-4 block md:hidden" />
-					<span className="hidden md:block">Add New Report</span>
-				</Button>
-			</DialogTrigger>
-			<DialogContent className="sm:max-w-[425px] scrollbar-hide max-h-[90vh] overflow-auto">
-				<form onSubmit={handleSubmit}>
-					<DialogHeader>
-						<DialogTitle>Create Report</DialogTitle>
-						<DialogDescription>
-							Add a new report to the system. All fields are
-							required.
-						</DialogDescription>
-					</DialogHeader>
-					<div className="grid gap-4 py-4 scrollbar-hide">
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="report_date"
-								className="text-left md:text-right"
-							>
-								Date <span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="report_date"
-								name="report_date"
-								type="date"
-								value={formData.report_date}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="opening_kg"
-								className="text-left md:text-right md:col-span-1"
-							>
-								Opening KG{" "}
-								<span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="opening_kg"
-								name="opening_kg"
-								type="number"
-								value={formData.opening_kg || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="additional_kg"
-								className="text-left md:text-right"
-							>
-								Additional KG{" "}
-								<span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="additional_kg"
-								name="additional_kg"
-								type="number"
-								value={formData.additional_kg || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="kg_used"
-								className="text-left md:text-right"
-							>
-								KG Used <span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="kg_used"
-								name="kg_used"
-								type="number"
-								value={formData.kg_used || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="closing_kg"
-								className="text-left md:text-right"
-							>
-								Closing KG{" "}
-								<span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="closing_kg"
-								name="closing_kg"
-								type="number"
-								value={formData.closing_kg || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="opening_bag"
-								className="text-left md:text-right"
-							>
-								Opening Bag{" "}
-								<span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="opening_bag"
-								name="opening_bag"
-								type="number"
-								value={formData.opening_bag || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="bag_produced"
-								className="text-left md:text-right"
-							>
-								Bag Produced{" "}
-								<span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="bag_produced"
-								name="bag_produced"
-								type="number"
-								value={formData.bag_produced || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="bag_sold"
-								className="text-left md:text-right"
-							>
-								Bag Sold <span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="bag_sold"
-								name="bag_sold"
-								type="number"
-								value={formData.bag_sold || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="closing_bag"
-								className="text-left md:text-right"
-							>
-								Closing Bag{" "}
-								<span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="closing_bag"
-								name="closing_bag"
-								type="number"
-								value={formData.closing_bag || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="missing_bag"
-								className="text-left md:text-right"
-							>
-								Missing Bag{" "}
-								<span className="text-red-500">*</span>
-							</Label>
-							<Input
-								id="missing_bag"
-								name="missing_bag"
-								type="number"
-								value={formData.missing_bag || ""}
-								onChange={handleChange}
-								className="md:col-span-3"
-								required
-								min="0"
-								step="0.01"
-								inputMode="decimal"
-								pattern="[0-9]*[.,]?[0-9]*"
-							/>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-							<Label
-								htmlFor="location"
-								className="text-left md:text-right"
-							>
-								Location <span className="text-red-500">*</span>
-							</Label>
-							<Select
-								name="location"
-								value={formData.location}
-								onValueChange={(value) =>
-									setFormData((prev) => ({
-										...prev,
-										location: value,
-									}))
-								}
-								required
-							>
-								<SelectTrigger className="md:col-span-3">
-									<SelectValue placeholder="Select location" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="extension">
-										Extension
-									</SelectItem>
-									<SelectItem value="newsite">
-										New Site
-									</SelectItem>
-									<SelectItem value="oldsite">
-										Old Site
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
-					</div>
-					<DialogFooter>
-						<Button type="submit" disabled={isSubmitting}>
-							{isSubmitting ? (
-								<>
-									<Spinner size="sm" className="mr-2" />
-									Creating...
-								</>
-							) : (
-								"Create Report"
-							)}
-						</Button>
-					</DialogFooter>
-				</form>
-			</DialogContent>
-		</Dialog>
-	);
+                <FormField
+                  control={form.control}
+                  name="opening_bag"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Opening bag</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="bag_produced"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bag Produced</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="bag_sold"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bags Sold</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="closing_bag"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Closing Bags</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="missing_bag"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Missing Bag</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="opening_stock"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Opening Stock</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="additional_stock"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Additional Stock</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="stock_used"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Stock Used</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="damage_stock"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Damage Stock</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="closing_stock"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Closing Stock</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="missing_stock"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Missing Stock</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="sales_rep"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sales Representative</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select sales representative" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {supervisors?.map((supervisor) => (
+                            <SelectItem
+                              key={supervisor.id}
+                              value={supervisor.name}
+                            >
+                              {supervisor.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="supervisor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Supervisor</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select supervisor" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {supervisors?.map((supervisor) => (
+                            <SelectItem
+                              key={supervisor.id}
+                              value={supervisor.name}
+                            >
+                              {supervisor.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="location"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select location" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="extension">Extension</SelectItem>
+                          <SelectItem value="oldsite">Oldsite</SelectItem>
+                          <SelectItem value="newsite">Newsite</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </ScrollArea>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? "Creating..." : "Create Report"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
 }

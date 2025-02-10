@@ -1,5 +1,6 @@
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
+"use client";
+
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +9,35 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/context/auth-context";
+import { reportService } from "@/lib/report-service";
+import { downloadReportImage } from "@/lib/report-image-generator";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { Report, ReportFormValues } from "@/types/report";
+import { isAdminUser } from "@/lib/utils";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+import { supervisorService } from "@/lib/services/supervisor-service";
+import { ScrollArea } from "../ui/scroll-area";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,430 +47,553 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { reportService } from "@/lib/report-service"
-import { Report } from "@/types"
-import { useQueryClient } from "@tanstack/react-query"
-import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/context/auth-context"
-import { Spinner } from "@/components/ui/spinner"
-import { downloadReportImage } from "@/lib/report-image-generator"
-import { Edit } from "lucide-react"
+} from "@/components/ui/alert-dialog";
+import { MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface EditReportDialogProps {
-  report: Report
+  report: Report;
 }
 
 export function EditReportDialog({ report }: EditReportDialogProps) {
-  const [open, setOpen] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isExporting, setIsExporting] = useState(false)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const queryClient = useQueryClient()
-  const { toast } = useToast()
-  const { user } = useAuth()
-  
-  const [formData, setFormData] = useState({
-    opening_kg: report.opening_kg,
-    additional_kg: report.additional_kg,
-    kg_used: report.kg_used,
-    closing_kg: report.closing_kg,
-    opening_bag: report.opening_bag,
-    bag_produced: report.bag_produced,
-    bag_sold: report.bag_sold,
-    closing_bag: report.closing_bag,
-    missing_bag: report.missing_bag,
-    location: report.location,
-    report_date: report.report_date instanceof Date 
-      ? report.report_date.toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0],
-  })
+  const [open, setOpen] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user?.email) return
+  // Check if user has permission to edit this report
+  const isAdmin = isAdminUser();
+  const isReportCreator = user?.email === report.recorded_by;
+  const canEditReport = isAdmin || isReportCreator;
 
-    // Validate all required fields
-    if (!formData.location) {
+  if (!canEditReport) {
+    return null; // Don't render the edit button if user doesn't have permission
+  }
+
+  const form = useForm<ReportFormValues>({
+    defaultValues: {
+      opening_kg: report?.opening_kg,
+      additional_kg: report?.additional_kg,
+      kg_used: report?.kg_used,
+      closing_kg: report?.closing_kg,
+      each_kg_produced: report?.each_kg_produced,
+      opening_bag: report?.opening_bag,
+      bag_produced: report?.bag_produced,
+      bag_sold: report?.bag_sold,
+      missing_bag: report?.missing_bag,
+      closing_bag: report.closing_bag,
+      recorded_by: report.recorded_by,
+      opening_stock: report?.opening_stock,
+      additional_stock: report?.additional_stock,
+      stock_used: report?.stock_used,
+      damage_stock: report?.damage_stock,
+      closing_stock: report?.closing_stock,
+      missing_stock: report?.missing_stock,
+      sales_rep: report?.sales_rep,
+      supervisor: report?.supervisor,
+      location: report?.location,
+      report_date: report.report_date
+        ? new Date(report.report_date)
+        : new Date(),
+    },
+  });
+
+  console.log("Form default values:", form.getValues());
+
+  // Fetch supervisors for the select input
+  const { data: supervisors } = useQuery({
+    queryKey: ["supervisors"],
+    queryFn: supervisorService.getSupervisors,
+  });
+
+  const onSubmit = async (data: ReportFormValues) => {
+    if (!user || !user.email) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to edit a report",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if user has permission to edit this report
+    const isAdmin = isAdminUser();
+    const isReportCreator = report.recorded_by === user.email;
+    
+    if (!isAdmin && !isReportCreator) {
+      toast({
+        title: "Permission Denied",
+        description: "You can only edit reports that you created",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await reportService.updateReport(report.id, {
+        ...data,
+        updated_at: new Date(),
+        updated_by: user.email,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      toast({
+        title: "Success",
+        description: "Report updated successfully",
+      });
+      setOpen(false);
+    } catch (error) {
+      console.error("Error updating report:", error);
       toast({
         title: "Error",
-        description: "Please select a location",
+        description: "Failed to update report",
         variant: "destructive",
-      })
-      return
-    }
-
-    // Check if any numeric field is empty or 0
-    const numericFields = [
-      'opening_kg',
-      'additional_kg',
-      'kg_used',
-      'closing_kg',
-      'opening_bag',
-      'bag_produced',
-      'bag_sold',
-      'closing_bag',
-      'missing_bag'
-    ]
-
-    for (const field of numericFields) {
-      if (!formData[field as keyof typeof formData]) {
-        toast({
-          title: "Error",
-          description: `Please enter a value for ${field.replace('_', ' ')}`,
-          variant: "destructive",
-        })
-        return
-      }
-    }
-    
-    setIsSubmitting(true)
-    try {
-      const updatedData = {
-        ...formData,
-        recorded_by: user.email,
-        report_date: new Date(formData.report_date)
-      }
-      await reportService.updateReport(report.id, updatedData)
-      queryClient.invalidateQueries({ queryKey: ['reports'] })
-      setOpen(false)
-      toast({
-        description: "Report updated successfully.",
-      })
-    } catch (error) {
-      console.error("Error updating report:", error)
-      toast({
-        variant: "destructive",
-        description: "Failed to update report.",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    try {
-      setIsDeleting(true)
-      await reportService.deleteReport(report.id)
-      queryClient.invalidateQueries({ queryKey: ['reports'] })
-      setShowDeleteDialog(false)
-      setOpen(false)
-      toast({
-        description: "Report deleted successfully.",
-      })
-    } catch (error) {
-      console.error("Error deleting report:", error)
-      toast({
-        variant: "destructive",
-        description: "Failed to delete report. Please try again.",
-      })
-    } finally {
-      setIsDeleting(false)
-    }
-  }
-
-  const handleExport = async () => {
-    try {
-      setIsExporting(true);
-      await downloadReportImage(report);
-      toast({
-        description: "Report exported successfully.",
       });
-    } catch (error) {
-      console.error("Error exporting report:", error);
-      toast({
-        variant: "destructive",
-        description: "Failed to export report.",
-      });
-    } finally {
-      setIsExporting(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
-  }
+  const handleDelete = async () => {
+    try {
+      await reportService.deleteReport(report.id);
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      toast({
+        title: "Success",
+        description: "Report deleted successfully",
+      });
+      setShowDeleteDialog(false);
+      setOpen(false);
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete report",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="destructive" size="sm">
-          <Edit className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] scrollbar-hide max-h-[90vh] overflow-auto">
-        <form onSubmit={handleSubmit}>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <span className="sr-only">Open menu</span>
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(true);
+            }}
+          >
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => downloadReportImage(report)}>
+            Export Image
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-red-600"
+            onClick={() => setShowDeleteDialog(true)}
+          >
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Edit Report</DialogTitle>
             <DialogDescription>
-              Make changes to the report. All fields are required.
+              Make changes to the report below
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="report_date" className="text-left md:text-right">
-                Date <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="report_date"
-                name="report_date"
-                type="date"
-                value={formData.report_date}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="opening_kg" className="text-left md:text-right">
-                Opening KG <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="opening_kg"
-                name="opening_kg"
-                type="number"
-                value={formData.opening_kg || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="additional_kg" className="text-left md:text-right">
-                Additional KG <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="additional_kg"
-                name="additional_kg"
-                type="number"
-                value={formData.additional_kg || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="kg_used" className="text-left md:text-right">
-                KG Used <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="kg_used"
-                name="kg_used"
-                type="number"
-                value={formData.kg_used || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="closing_kg" className="text-left md:text-right">
-                Closing KG <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="closing_kg"
-                name="closing_kg"
-                type="number"
-                value={formData.closing_kg || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="opening_bag" className="text-left md:text-right">
-                Opening Bag <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="opening_bag"
-                name="opening_bag"
-                type="number"
-                value={formData.opening_bag || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="bag_produced" className="text-left md:text-right">
-                Bag Produced <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="bag_produced"
-                name="bag_produced"
-                type="number"
-                value={formData.bag_produced || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="bag_sold" className="text-left md:text-right">
-                Bag Sold <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="bag_sold"
-                name="bag_sold"
-                type="number"
-                value={formData.bag_sold || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="closing_bag" className="text-left md:text-right">
-                Closing Bag <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="closing_bag"
-                name="closing_bag"
-                type="number"
-                value={formData.closing_bag || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="missing_bag" className="text-left md:text-right">
-                Missing Bag <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="missing_bag"
-                name="missing_bag"
-                type="number"
-                value={formData.missing_bag || ''}
-                onChange={handleChange}
-                className="md:col-span-3"
-                required
-                min="0"
-                step="0.01"
-                inputMode="decimal"
-                pattern="[0-9]*[.,]?[0-9]*"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
-              <Label htmlFor="location" className="text-left md:text-right">
-                Location <span className="text-red-500">*</span>
-              </Label>
-              <Select
-                name="location"
-                value={formData.location}
-                onValueChange={(value) =>
-                  setFormData((prev) => ({ ...prev, location: value }))
-                }
-                required
-              >
-                <SelectTrigger className="md:col-span-3">
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="extension">Extension</SelectItem>
-                  <SelectItem value="newsite">New Site</SelectItem>
-                  <SelectItem value="oldsite">Old Site</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter className="flex justify-between items-center">
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                onClick={handleExport}
-                disabled={isExporting}
-                variant="outline"
-              >
-                {isExporting ? (
-                  <Spinner size="sm" className="mr-2" />
-                ) : (
-                  <span>Export</span>
-                )}
-              </Button>
-              <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={isDeleting || isSubmitting}
-                  >
-                    {isDeleting ? (
-                      <>
-                        <Spinner size="sm" className="mr-2" />
-                        Deleting...
-                      </>
-                    ) : (
-                      'Delete'
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <ScrollArea className="h-[400px] pr-4">
+                <div className="mx-4">
+                  <FormField
+                    control={form.control}
+                    name="report_date"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Report Date</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            required
+                            {...field}
+                            value={
+                              field.value instanceof Date
+                                ? field.value.toISOString().split("T")[0]
+                                : typeof field.value === 'string'
+                                ? new Date(field.value).toISOString().split("T")[0]
+                                : ""
+                            }
+                            onChange={(e) => {
+                              field.onChange(
+                                e.target.value ? new Date(e.target.value) : null
+                              );
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This action cannot be undone. This will permanently delete this report.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-           
-              <Button type="submit" disabled={isDeleting || isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Spinner size="sm" className="mr-2" />
-                    Updating...
-                  </>
-                ) : (
-                  'Update'
-                )}
-              </Button>
-            </div>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
+                  />
+                  <FormField
+                    control={form.control}
+                    name="opening_kg"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Opening Kg</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="additional_kg"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Additional Kg</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="kg_used"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Kg used</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} required />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="closing_kg"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Closing Kg</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="each_kg_produced"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Each Kg Produced</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="opening_bag"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Opening bag</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="bag_produced"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bag Produced</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="bag_sold"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bags Sold</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="closing_bag"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Closing Bags</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="missing_bag"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Missing Bag</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="opening_stock"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Opening Stock</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="additional_stock"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Additional Stock</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="stock_used"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Stock Used</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="damage_stock"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Damage Stock</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="closing_stock"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Closing Stock</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="missing_stock"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Missing Stock</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="sales_rep"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sales Representative</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select sales representative" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {supervisors?.map((supervisor) => (
+                              <SelectItem
+                                key={supervisor.id}
+                                value={supervisor.name}
+                              >
+                                {supervisor.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="supervisor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Supervisor</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select supervisor" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {supervisors?.map((supervisor) => (
+                              <SelectItem
+                                key={supervisor.id}
+                                value={supervisor.name}
+                              >
+                                {supervisor.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="location"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Location</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select location" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="extension">Extension</SelectItem>
+                            <SelectItem value="oldsite">Oldsite</SelectItem>
+                            <SelectItem value="newsite">Newsite</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </ScrollArea>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => downloadReportImage(report)}
+                >
+                  Export Image
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              report.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }

@@ -17,5 +17,5 @@ export function middleware(request: NextRequest) {
 
 // Specify the paths where the middleware should run
 export const config = {
-  matcher: ['/reports/:path*'], // Apply middleware to all paths under /reports
+  matcher: ['/reports/:path*', '/supervisors/:path*', '/users/:path*'], // Apply middleware to all paths under /reports
 };
