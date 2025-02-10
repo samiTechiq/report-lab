@@ -85,6 +85,7 @@ export function UploadReportDialog() {
             'additional_kg',
             'kg_used',
             'closing_kg',
+            'damage_kg',
             'each_kg_produced',
             'opening_bag',
             'bag_produced',
@@ -124,6 +125,7 @@ export function UploadReportDialog() {
                 'additional_kg',
                 'kg_used',
                 'closing_kg',
+                'damage_kg',
                 'each_kg_produced',
                 'opening_bag',
                 'bag_produced',
@@ -242,6 +244,7 @@ export function UploadReportDialog() {
       additional_kg: "50.00",
       kg_used: "75.00",
       closing_kg: "75.00",
+      damage_kg: "5.00",
       each_kg_produced: "25.00",
       opening_bag: "200.00",
       bag_produced: "150.00",
@@ -370,6 +373,7 @@ export function UploadReportDialog() {
               <li>additional_kg (number)</li>
               <li>kg_used (number)</li>
               <li>closing_kg (number)</li>
+              <li>damage_kg (number)</li>
               <li>each_kg_produced (number)</li>
               <li>opening_bag (number)</li>
               <li>bag_produced (number)</li>

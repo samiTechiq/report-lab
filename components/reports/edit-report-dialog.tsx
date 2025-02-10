@@ -82,6 +82,7 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
       additional_kg: report?.additional_kg,
       kg_used: report?.kg_used,
       closing_kg: report?.closing_kg,
+      damage_kg: report?.damage_kg,
       each_kg_produced: report?.each_kg_produced,
       opening_bag: report?.opening_bag,
       bag_produced: report?.bag_produced,
@@ -125,7 +126,7 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
     // Check if user has permission to edit this report
     const isAdmin = isAdminUser();
     const isReportCreator = report.recorded_by === user.email;
-    
+
     if (!isAdmin && !isReportCreator) {
       toast({
         title: "Permission Denied",
@@ -233,8 +234,10 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
                             value={
                               field.value instanceof Date
                                 ? field.value.toISOString().split("T")[0]
-                                : typeof field.value === 'string'
-                                ? new Date(field.value).toISOString().split("T")[0]
+                                : typeof field.value === "string"
+                                ? new Date(field.value)
+                                    .toISOString()
+                                    .split("T")[0]
                                 : ""
                             }
                             onChange={(e) => {
@@ -293,6 +296,20 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Closing Kg</FormLabel>
+                        <FormControl>
+                          <Input type="number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="damage_kg"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Damage Kg</FormLabel>
                         <FormControl>
                           <Input type="number" {...field} />
                         </FormControl>

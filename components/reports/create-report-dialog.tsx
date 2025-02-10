@@ -49,6 +49,7 @@ export function CreateReportDialog() {
       additional_kg: 0,
       kg_used: 0,
       closing_kg: 0,
+      damage_kg: 0,
       each_kg_produced: 0,
       opening_bag: 0,
       bag_produced: 0,
@@ -193,6 +194,20 @@ export function CreateReportDialog() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Closing Kg</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="damage_kg"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Damage Kg</FormLabel>
                       <FormControl>
                         <Input type="number" {...field} />
                       </FormControl>

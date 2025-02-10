@@ -7,6 +7,7 @@ export interface ReportCSVData {
   "Additional KG": string;
   "KG Used": string;
   "Closing KG": string;
+  "Damage KG": string;
   "Each KG Produced": string;
   "Opening Bag": string;
   "Bag Produced": string;
@@ -35,6 +36,7 @@ export const exportReportsToCSV = (reports: Report[]) => {
     "Additional KG": report.additional_kg || '',
     "KG Used": report.kg_used || '',
     "Closing KG": report.closing_kg || '',
+    "Damage KG": report.damage_kg || '',
     "Each KG Produced": report.each_kg_produced || '',
     "Opening Bag": report.opening_bag || '',
     "Bag Produced": report.bag_produced || '',
@@ -132,6 +134,9 @@ export const importReportsFromCSV = async (file: File): Promise<Partial<Report>[
                 break;
               case "Closing KG":
                 report.closing_kg = value ? parseFloat(value) : 0;
+                break;
+              case "Damage KG":
+                report.damage_kg = value ? parseFloat(value) : 0;
                 break;
               case "Each KG Produced":
                 report.each_kg_produced = value ? parseFloat(value) : 0;
