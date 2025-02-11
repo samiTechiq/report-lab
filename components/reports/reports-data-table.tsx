@@ -22,6 +22,7 @@ import { formatNumber, subStr } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { FilterReportsDialog } from "@/components/reports/filter-reports-dialog"
 import { exportReportsToCSV } from "@/lib/csv-utils"
+import { ReportAggregationDialog } from "@/components/reports/report-aggregation-dialog"
 
 const ITEMS_PER_PAGE = 10
 
@@ -207,7 +208,11 @@ export function ReportsDataTable() {
             >
               <Download className="h-4 w-4" />
             </Button>
-           
+            <ReportAggregationDialog 
+              reports={filteredReports}
+              startDate={filters.startDate}
+              endDate={filters.endDate}
+            />
           </div>
         )}
         <div className="hidden md:block"><UploadReportDialog /></div>
