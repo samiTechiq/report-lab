@@ -70,12 +70,11 @@ export function LoginForm() {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-
+      // First set the Firebase use
+      setUser(userData);
       // Store the custom user data
       Cookies.set(STORAGE_KEY, JSON.stringify(userData), { expires: 7 });
       localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
-      // First set the Firebase use
-      setUser(userData);
 
       router.push("/reports");
     } catch (error: any) {
