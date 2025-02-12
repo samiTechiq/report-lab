@@ -70,3 +70,15 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .input-control {
+    @apply px-2 py-2 border border-slate-300 block w-full rounded-md 
+              outline-none shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
+  }
+
+  .buttom {
+    @apply px-2 py-2 border border-slate-300 block w-full rounded-md 
+              outline-none shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
+  }
+}

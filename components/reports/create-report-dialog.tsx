@@ -1,5 +1,3 @@
-"use client";
-
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,7 +8,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
@@ -18,27 +15,26 @@ import { reportService } from "@/lib/report-service";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { ReportFormValues } from "@/types/report";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { supervisorService } from "@/lib/services/supervisor-service";
 import { ScrollArea } from "../ui/scroll-area";
 
+const formSteps = [
+  { id: "basic", title: "Basic Information" },
+  { id: "kg", title: "KG Information" },
+  { id: "bags", title: "Bags Information" },
+  { id: "stock", title: "Stock Information" },
+];
+
+type FormField = {
+  name: keyof ReportFormValues;
+  label: string;
+};
+
 export function CreateReportDialog() {
   const [open, setOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [dateValue, setDateValue] = useState("");
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -70,7 +66,6 @@ export function CreateReportDialog() {
     },
   });
 
-  // Fetch supervisors for the select input
   const { data: supervisors } = useQuery({
     queryKey: ["supervisors"],
     queryFn: supervisorService.getSupervisors,
@@ -87,28 +82,320 @@ export function CreateReportDialog() {
     }
 
     try {
-      await reportService.createReport({
-        ...data,
-        recorded_by: user.email,
-        updated_by: "",
-      });
+      // Check for duplicate report
+      const reportDate =
+        data.report_date instanceof Date
+          ? data.report_date
+          : new Date(data.report_date);
 
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      const hasDuplicate = await reportService.checkDuplicateReport(
+        reportDate,
+        data.location
+      );
+
+      if (hasDuplicate) {
+        toast({
+          variant: "destructive",
+          title: "Duplicate Report",
+          description: "A report already exists for this date and location.",
+        });
+        return;
+      }
+
+      // If no duplicate, proceed with report creation
+      // const formattedData = {
+      //   ...data,
+      //   report_date:
+      //     data.report_date instanceof Date
+      //       ? data.report_date
+      //       : new Date(data.report_date),
+      //   recorded_by: user.email,
+      //   updated_by: user.email,
+      // };
+
+      const formattedData = {
+        ...data,
+        report_date: new Date(data.report_date + "T12:00:00"),
+        recorded_by: user.email,
+        updated_by: user.email,
+      };
+
+      await reportService.createReport(formattedData);
+
       toast({
         title: "Success",
         description: "Report created successfully",
       });
-      setOpen(false);
+
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
       form.reset();
+      setOpen(false);
     } catch (error) {
       console.error("Error creating report:", error);
       toast({
-        title: "Error",
-        description: "Failed to create report",
         variant: "destructive",
+        title: "Error",
+        description: "Failed to create report. Please try again.",
       });
     }
   };
+
+  const currentStepFields = [
+    ["report_date", "location", "sales_rep", "supervisor"],
+    [
+      "opening_kg",
+      "additional_kg",
+      "kg_used",
+      "closing_kg",
+      "damage_kg",
+      "each_kg_produced",
+    ],
+    ["opening_bag", "bag_produced", "bag_sold", "missing_bag", "closing_bag"],
+    [
+      "opening_stock",
+      "additional_stock",
+      "stock_used",
+      "damage_stock",
+      "closing_stock",
+      "missing_stock",
+    ],
+  ];
+
+  const nextStep = () => {
+    // Validate current step fields
+    const stepFields = currentStepFields[currentStep];
+    const stepIsValid = stepFields.every((field) => {
+      const value = form.getValues(field as keyof ReportFormValues);
+      return value !== undefined && value !== "" && value !== 0;
+    });
+
+    if (!stepIsValid) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all fields before proceeding",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (currentStep < formSteps.length - 1) {
+      setCurrentStep((prev) => prev + 1);
+    }
+  };
+
+  const prevStep = () => {
+    if (currentStep > 0) {
+      setCurrentStep((prev) => prev - 1);
+    }
+  };
+
+  const handleSubmit = async () => {
+    const allFields = [
+      ...currentStepFields[0],
+      ...currentStepFields[1],
+      ...currentStepFields[2],
+      ...currentStepFields[3],
+    ];
+
+    const formIsValid = allFields.every((field) => {
+      const value = form.getValues(field as keyof ReportFormValues);
+      return value !== undefined && value !== "" && value !== 0;
+    });
+
+    if (!formIsValid) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all fields before submitting",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    await form.handleSubmit(onSubmit)();
+  };
+
+  const renderBasicInfo = () => {
+    const reportDate = form.getValues("report_date");
+    // Ensure we have a valid Date object and format it for the input
+    const dateValue =
+      reportDate instanceof Date
+        ? reportDate.toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0];
+
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4">
+          <div>
+            <label
+              htmlFor="report_date"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Report Date
+            </label>
+            <input
+              type="date"
+              className="input-control"
+              {...form.register("report_date")}
+              required
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="location"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Location
+            </label>
+            <select
+              id="location"
+              className="input-control"
+              {...form.register("location")}
+              required
+            >
+              <option value="">Select location</option>
+              <option value="extension">Extension</option>
+              <option value="oldsite">Oldsite</option>
+              <option value="newsite">Newsite</option>
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="sales_rep"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Sales Representative
+            </label>
+            <select
+              id="sales_rep"
+              className="input-control"
+              {...form.register("sales_rep")}
+              required
+            >
+              <option value="">Select sales representative</option>
+              {supervisors?.map((supervisor) => (
+                <option key={supervisor.id} value={supervisor.name}>
+                  {supervisor.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="supervisor"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Supervisor
+            </label>
+            <select
+              id="supervisor"
+              className="input-control"
+              {...form.register("supervisor")}
+              required
+            >
+              <option value="">Select supervisor</option>
+              {supervisors?.map((supervisor) => (
+                <option key={supervisor.id} value={supervisor.name}>
+                  {supervisor.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderKgInfo = () => (
+    <div className="space-y-4">
+      <div className="grid gap-4">
+        {[
+          { name: "opening_kg" as const, label: "Opening KG" },
+          { name: "additional_kg" as const, label: "Additional KG" },
+          { name: "kg_used" as const, label: "KG Used" },
+          { name: "closing_kg" as const, label: "Closing KG" },
+          { name: "damage_kg" as const, label: "Damage KG" },
+          { name: "each_kg_produced" as const, label: "Each KG Produced" },
+        ].map((field) => (
+          <div key={field.name}>
+            <label
+              htmlFor={field.name}
+              className="block text-sm font-medium text-gray-700"
+            >
+              {field.label}
+            </label>
+            <input
+              type="number"
+              id={field.name}
+              className="input-control"
+              {...form.register(field.name)}
+              required
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderBagsInfo = () => (
+    <div className="space-y-4">
+      <div className="grid gap-4">
+        {[
+          { name: "opening_bag" as const, label: "Opening Bags" },
+          { name: "bag_produced" as const, label: "Bags Produced" },
+          { name: "bag_sold" as const, label: "Bags Sold" },
+          { name: "missing_bag" as const, label: "Missing Bags" },
+          { name: "closing_bag" as const, label: "Closing Bags" },
+        ].map((field) => (
+          <div key={field.name}>
+            <label
+              htmlFor={field.name}
+              className="block text-sm font-medium text-gray-700"
+            >
+              {field.label}
+            </label>
+            <input
+              type="number"
+              id={field.name}
+              className="input-control"
+              {...form.register(field.name)}
+              required
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderStockInfo = () => (
+    <div className="space-y-4">
+      <div className="grid gap-4">
+        {[
+          { name: "opening_stock" as const, label: "Opening Stock" },
+          { name: "additional_stock" as const, label: "Additional Stock" },
+          { name: "stock_used" as const, label: "Stock Used" },
+          { name: "damage_stock" as const, label: "Damage Stock" },
+          { name: "closing_stock" as const, label: "Closing Stock" },
+          { name: "missing_stock" as const, label: "Missing Stock" },
+        ].map((field) => (
+          <div key={field.name}>
+            <label
+              htmlFor={field.name}
+              className="block text-sm font-medium text-gray-700"
+            >
+              {field.label}
+            </label>
+            <input
+              type="number"
+              id={field.name}
+              className="input-control"
+              {...form.register(field.name)}
+              required
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -117,377 +404,57 @@ export function CreateReportDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Create Report</DialogTitle>
+          <DialogTitle>
+            Create Report{" "}
+            <span className="hidden md:inline">
+              - {formSteps[currentStep].title}
+            </span>{" "}
+          </DialogTitle>
           <DialogDescription>
-            Create a new report with the form below
+            <span className="font-semibold text-red-500 md:hidden">
+              {formSteps[currentStep].title} -
+            </span>{" "}
+            step {currentStep + 1} of {formSteps.length}
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="mx-4 mb-4">
-                <FormField
-                  control={form.control}
-                  name="report_date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Report Date</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="date"
-                          required
-                          {...field}
-                          value={field.value.toISOString().split("T")[0] || ""}
-                          onChange={(e) => {
-                            field.onChange(
-                              e.target.value ? new Date(e.target.value) : ""
-                            );
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="my-4 border-b border-gray-300">
-                  <h1 className="text-sm font-semibold">Kg Information</h1>
-                </div>
-                <FormField
-                  control={form.control}
-                  name="opening_kg"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Opening Kg</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="additional_kg"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Additional Kg</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="kg_used"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Kg used</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} required />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="closing_kg"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Closing Kg</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="damage_kg"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Damage Kg</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="each_kg_produced"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Each Kg Produced</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="my-4 border-b border-gray-300">
-                  <h1 className="text-sm font-semibold">Product Information</h1>
-                </div>
-                <FormField
-                  control={form.control}
-                  name="opening_bag"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Opening bag</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="bag_produced"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bag Produced</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="bag_sold"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bags Sold</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="closing_bag"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Closing Bags</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="missing_bag"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Missing Bag</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="my-4 border-b border-gray-300">
-                  <h1 className="text-sm font-semibold">
-                    Packing Bag Information
-                  </h1>
-                </div>
-                <FormField
-                  control={form.control}
-                  name="opening_stock"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Opening Stock</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="additional_stock"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Additional Stock</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="stock_used"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Stock Used</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="damage_stock"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Damage Stock</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="closing_stock"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Closing Stock</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="missing_stock"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Missing Stock</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="sales_rep"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Sales Representative</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select sales representative" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {supervisors?.map((supervisor) => (
-                            <SelectItem
-                              key={supervisor.id}
-                              value={supervisor.name}
-                            >
-                              {supervisor.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="supervisor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Supervisor</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select supervisor" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {supervisors?.map((supervisor) => (
-                            <SelectItem
-                              key={supervisor.id}
-                              value={supervisor.name}
-                            >
-                              {supervisor.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="location"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Location</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select location" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="extension">Extension</SelectItem>
-                          <SelectItem value="oldsite">Oldsite</SelectItem>
-                          <SelectItem value="newsite">Newsite</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </ScrollArea>
-            <DialogFooter>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+          }}
+          className="space-y-4"
+        >
+          <ScrollArea className="h-[400px] pr-4">
+            <div className="mx-4 mb-4">
+              {currentStep === 0 && renderBasicInfo()}
+              {currentStep === 1 && renderKgInfo()}
+              {currentStep === 2 && renderBagsInfo()}
+              {currentStep === 3 && renderStockInfo()}
+            </div>
+          </ScrollArea>
+          <div className="flex justify-between pt-4 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={prevStep}
+              className={currentStep === 0 ? "invisible" : ""}
+            >
+              Previous
+            </Button>
+            {currentStep === formSteps.length - 1 ? (
               <Button
-                variant="outline"
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={handleSubmit}
+                disabled={form.formState.isSubmitting}
               >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting ? "Creating..." : "Create Report"}
               </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+            ) : (
+              <Button type="button" onClick={nextStep}>
+                Next
+              </Button>
+            )}
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

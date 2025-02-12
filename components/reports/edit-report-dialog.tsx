@@ -5,12 +5,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
@@ -20,21 +17,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Report, ReportFormValues } from "@/types/report";
 import { isAdminUser } from "@/lib/utils";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useQuery } from "@tanstack/react-query";
 import { supervisorService } from "@/lib/services/supervisor-service";
 import { ScrollArea } from "../ui/scroll-area";
@@ -48,13 +30,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreHorizontal } from "lucide-react";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  MoreHorizontal,
+  Trash2,
+} from "lucide-react";
+
+const formSteps = [
+  { id: "basic", title: "Basic Information" },
+  { id: "kg", title: "KG Information" },
+  { id: "bags", title: "Bags Information" },
+  { id: "stock", title: "Stock Information" },
+];
+
+type FormField = {
+  name: keyof ReportFormValues;
+  label: string;
+};
 
 interface EditReportDialogProps {
   report: Report;
@@ -62,99 +56,53 @@ interface EditReportDialogProps {
 
 export function EditReportDialog({ report }: EditReportDialogProps) {
   const [open, setOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Check if user has permission to edit this report
-  const isAdmin = isAdminUser();
-  const isReportCreator = user?.email === report.recorded_by;
-  const canEditReport = isAdmin || isReportCreator;
-
-  if (!canEditReport) {
-    return null; // Don't render the edit button if user doesn't have permission
-  }
-
   const form = useForm<ReportFormValues>({
     defaultValues: {
-      opening_kg: report?.opening_kg,
-      additional_kg: report?.additional_kg,
-      kg_used: report?.kg_used,
-      closing_kg: report?.closing_kg,
-      damage_kg: report?.damage_kg,
-      each_kg_produced: report?.each_kg_produced,
-      opening_bag: report?.opening_bag,
-      bag_produced: report?.bag_produced,
-      bag_sold: report?.bag_sold,
-      missing_bag: report?.missing_bag,
-      closing_bag: report.closing_bag,
-      recorded_by: report.recorded_by,
-      opening_stock: report?.opening_stock,
-      additional_stock: report?.additional_stock,
-      stock_used: report?.stock_used,
-      damage_stock: report?.damage_stock,
-      closing_stock: report?.closing_stock,
-      missing_stock: report?.missing_stock,
-      sales_rep: report?.sales_rep,
-      supervisor: report?.supervisor,
-      location: report?.location,
+      ...report,
       report_date: report.report_date
         ? new Date(report.report_date)
         : new Date(),
     },
   });
 
-  console.log("Form default values:", form.getValues());
-
   // Fetch supervisors for the select input
   const { data: supervisors } = useQuery({
     queryKey: ["supervisors"],
-    queryFn: supervisorService.getSupervisors,
+    queryFn: () => supervisorService.getSupervisors(),
   });
 
   const onSubmit = async (data: ReportFormValues) => {
-    if (!user || !user.email) {
-      toast({
-        title: "Authentication Error",
-        description: "You must be logged in to edit a report",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check if user has permission to edit this report
-    const isAdmin = isAdminUser();
-    const isReportCreator = report.recorded_by === user.email;
-
-    if (!isAdmin && !isReportCreator) {
-      toast({
-        title: "Permission Denied",
-        description: "You can only edit reports that you created",
-        variant: "destructive",
-      });
-      return;
-    }
-
     try {
-      await reportService.updateReport(report.id, {
+      const formattedData = {
         ...data,
-        updated_at: new Date(),
-        updated_by: user.email,
-      });
+        report_date:
+          data.report_date === new Date(report.report_date)
+            ? new Date(report.report_date) // Keep original date if unchanged
+            : data.report_date, // Use new date if changed
+        updated_by: user!.email,
+      };
 
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      await reportService.updateReport(report.id, formattedData);
+
       toast({
         title: "Success",
         description: "Report updated successfully",
       });
+
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
       setOpen(false);
     } catch (error) {
       console.error("Error updating report:", error);
       toast({
-        title: "Error",
-        description: "Failed to update report",
         variant: "destructive",
+        title: "Error",
+        description: "Failed to update report. Please try again.",
       });
     }
   };
@@ -162,432 +110,451 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
   const handleDelete = async () => {
     try {
       await reportService.deleteReport(report.id);
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
       toast({
         title: "Success",
         description: "Report deleted successfully",
       });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
       setShowDeleteDialog(false);
       setOpen(false);
     } catch (error) {
       console.error("Error deleting report:", error);
       toast({
-        title: "Error",
-        description: "Failed to delete report",
         variant: "destructive",
+        title: "Error",
+        description: "Failed to delete report. Please try again.",
       });
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    try {
+      await downloadReportImage(report);
+      toast({
+        title: "Success",
+        description: "Report image downloaded successfully",
+      });
+    } catch (error) {
+      console.error("Error downloading report image:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to download report image. Please try again.",
+      });
+    }
+  };
+
+  const nextFormStep = () => {
+    setCurrentStep((prev) => (prev < formSteps.length - 1 ? prev + 1 : prev));
+  };
+
+  const prevFormStep = () => {
+    setCurrentStep((prev) => (prev > 0 ? prev - 1 : prev));
+  };
+
+  const renderFormFields = () => {
+    switch (currentStep) {
+      case 0:
+        return (
+          <>
+            <div>
+              <label
+                htmlFor="report_date"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Report Date
+              </label>
+              <input
+                type="date"
+                className="input-control"
+                {...form.register("report_date")}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="location"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Location
+              </label>
+              <select
+                id="location"
+                className="input-control"
+                {...form.register("location")}
+                required
+              >
+                <option value="">Select location</option>
+                <option value="Oldsite">Oldsite</option>
+                <option value="Newsite">Newsite</option>
+                <option value="Extension">Extension</option>
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="sales_rep"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Sales Representative
+              </label>
+              <input
+                type="text"
+                className="input-control"
+                {...form.register("sales_rep")}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="supervisor"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Supervisor
+              </label>
+              <select
+                id="supervisor"
+                className="input-control"
+                {...form.register("supervisor")}
+                required
+              >
+                <option value="">Select supervisor</option>
+                {supervisors?.map((supervisor) => (
+                  <option key={supervisor.id} value={supervisor.name}>
+                    {supervisor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        );
+      case 1:
+        return (
+          <>
+            <div>
+              <label
+                htmlFor="opening_kg"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Opening KG
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("opening_kg", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="additional_kg"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Additional KG
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("additional_kg", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="kg_used"
+                className="block text-sm font-medium text-gray-700"
+              >
+                KG Used
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("kg_used", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="closing_kg"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Closing KG
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("closing_kg", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="damage_kg"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Damage KG
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("damage_kg", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="each_kg_produced"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Each KG Produced
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("each_kg_produced", { valueAsNumber: true })}
+                required
+              />
+            </div>
+          </>
+        );
+      case 2:
+        return (
+          <>
+            <div>
+              <label
+                htmlFor="opening_bag"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Opening Bag
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("opening_bag", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="bag_produced"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Bag Produced
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("bag_produced", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="bag_sold"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Bag Sold
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("bag_sold", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="closing_bag"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Closing Bag
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("closing_bag", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="missing_bag"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Missing Bag
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("missing_bag", { valueAsNumber: true })}
+                required
+              />
+            </div>
+          </>
+        );
+      case 3:
+        return (
+          <>
+            <div>
+              <label
+                htmlFor="opening_stock"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Opening Stock
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("opening_stock", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="additional_stock"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Additional Stock
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("additional_stock", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="stock_used"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Stock Used
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("stock_used", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="damage_stock"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Damage Stock
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("damage_stock", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="closing_stock"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Closing Stock
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("closing_stock", { valueAsNumber: true })}
+                required
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="missing_stock"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Missing Stock
+              </label>
+              <input
+                type="number"
+                className="input-control"
+                {...form.register("missing_stock", { valueAsNumber: true })}
+                required
+              />
+            </div>
+          </>
+        );
+      default:
+        return null;
     }
   };
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open menu</span>
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(true);
-            }}
-          >
-            Edit
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => downloadReportImage(report)}>
-            Export Image
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-red-600"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        variant="ghost"
+        className="flex h-8 w-8 p-0 data-[state=open]:bg-muted"
+        onClick={() => setOpen(true)}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:w-full max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Edit Report</DialogTitle>
+            <DialogTitle>
+              Edit Report{" "}
+              <span className="hidden md:inline">
+                - {formSteps[currentStep].title}
+              </span>{" "}
+            </DialogTitle>
             <DialogDescription>
-              Make changes to the report below
+              Make changes to the report here. Click save when you're done.
             </DialogDescription>
           </DialogHeader>
-          <Form {...form}>
+
+          <ScrollArea className="h-[400px] pr-4">
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <ScrollArea className="h-[400px] pr-4">
-                <div className="mx-4">
-                  <FormField
-                    control={form.control}
-                    name="report_date"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Report Date</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            required
-                            {...field}
-                            value={
-                              field.value instanceof Date
-                                ? field.value.toISOString().split("T")[0]
-                                : typeof field.value === "string"
-                                ? new Date(field.value)
-                                    .toISOString()
-                                    .split("T")[0]
-                                : ""
-                            }
-                            onChange={(e) => {
-                              field.onChange(
-                                e.target.value ? new Date(e.target.value) : null
-                              );
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="opening_kg"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Opening Kg</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="additional_kg"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Additional Kg</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="kg_used"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Kg used</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} required />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="closing_kg"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Closing Kg</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="damage_kg"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Damage Kg</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="each_kg_produced"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Each Kg Produced</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="opening_bag"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Opening bag</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="bag_produced"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bag Produced</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="bag_sold"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Bags Sold</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="closing_bag"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Closing Bags</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="missing_bag"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Missing Bag</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="opening_stock"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Opening Stock</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="additional_stock"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Additional Stock</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="stock_used"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Stock Used</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="damage_stock"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Damage Stock</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="closing_stock"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Closing Stock</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="missing_stock"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Missing Stock</FormLabel>
-                        <FormControl>
-                          <Input type="number" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="sales_rep"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sales Representative</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select sales representative" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {supervisors?.map((supervisor) => (
-                              <SelectItem
-                                key={supervisor.id}
-                                value={supervisor.name}
-                              >
-                                {supervisor.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="supervisor"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Supervisor</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select supervisor" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {supervisors?.map((supervisor) => (
-                              <SelectItem
-                                key={supervisor.id}
-                                value={supervisor.name}
-                              >
-                                {supervisor.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="location"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Location</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select location" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="extension">Extension</SelectItem>
-                            <SelectItem value="oldsite">Oldsite</SelectItem>
-                            <SelectItem value="newsite">Newsite</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </ScrollArea>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => downloadReportImage(report)}
-                >
-                  Export Image
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={form.formState.isSubmitting}>
-                  {form.formState.isSubmitting ? "Saving..." : "Save Changes"}
-                </Button>
-              </DialogFooter>
+              {renderFormFields()}
             </form>
-          </Form>
+          </ScrollArea>
+
+          <div className="flex justify-between mt-4">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={prevFormStep}
+                disabled={currentStep === 0}
+              >
+                <ArrowLeft />
+              </Button>
+              {currentStep === formSteps.length - 1 ? (
+                <Button type="submit" onClick={form.handleSubmit(onSubmit)}>
+                  Save
+                </Button>
+              ) : (
+                <Button type="button" onClick={nextFormStep}>
+                  <ArrowRight />
+                </Button>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              {isAdminUser() && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 />
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadImage}
+              >
+                <Download />
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -602,12 +569,7 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

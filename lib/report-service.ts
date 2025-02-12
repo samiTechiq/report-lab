@@ -29,14 +29,23 @@ interface GetReportsParams {
 
 export const reportService = {
   async createReport(report: Omit<Report, "id" | "created_at" | "updated_at">) {
-    const docRef = await addDoc(collection(db, REPORTS_COLLECTION), {
-      ...report,
-      each_kg_produced: report.each_kg_produced || 0,
-      report_date: report.report_date || new Date(),
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
-    return docRef.id;
+    try {
+      const reportDate = report.report_date instanceof Date 
+        ? report.report_date 
+        : new Date(report.report_date);
+
+      const docRef = await addDoc(collection(db, REPORTS_COLLECTION), {
+        ...report,
+        each_kg_produced: report.each_kg_produced || 0,
+        report_date: Timestamp.fromDate(reportDate),
+        created_at: Timestamp.fromDate(new Date()),
+        updated_at: Timestamp.fromDate(new Date()),
+      });
+      return docRef.id;
+    } catch (error) {
+      console.error("Error creating report:", error);
+      throw error;
+    }
   },
 
   async updateReport(id: string, report: Partial<Report>) {
@@ -45,11 +54,13 @@ export const reportService = {
       ...report,
       each_kg_produced: report.each_kg_produced !== undefined ? report.each_kg_produced : 0,
       report_date: report.report_date
-        ? report.report_date instanceof Date
-          ? report.report_date
-          : new Date(report.report_date)
-        : new Date(),
-      updated_at: new Date(),
+        ? Timestamp.fromDate(
+            report.report_date instanceof Date
+              ? report.report_date
+              : new Date(report.report_date)
+          )
+        : Timestamp.fromDate(new Date()),
+      updated_at: Timestamp.fromDate(new Date()),
     });
   },
 
@@ -83,11 +94,11 @@ export const reportService = {
       queryConstraints.push(orderBy("report_date", "desc"));
 
       if (startDate) {
-        queryConstraints.push(where("report_date", ">=", new Date(startDate)));
+        queryConstraints.push(where("report_date", ">=", Timestamp.fromDate(new Date(startDate))));
       }
 
       if (endDate) {
-        queryConstraints.push(where("report_date", "<=", new Date(endDate)));
+        queryConstraints.push(where("report_date", "<=", Timestamp.fromDate(new Date(endDate))));
       }
 
       if (lastDoc) {
@@ -161,11 +172,11 @@ export const reportService = {
       queryConstraints.push(orderBy("report_date", "desc"));
 
       if (startDate) {
-        queryConstraints.push(where("report_date", ">=", new Date(startDate)));
+        queryConstraints.push(where("report_date", ">=", Timestamp.fromDate(new Date(startDate))));
       }
 
       if (endDate) {
-        queryConstraints.push(where("report_date", "<=", new Date(endDate)));
+        queryConstraints.push(where("report_date", "<=", Timestamp.fromDate(new Date(endDate))));
       }
 
       const q = query(collection(db, REPORTS_COLLECTION), ...queryConstraints);
@@ -208,6 +219,29 @@ export const reportService = {
       return reports;
     } catch (error) {
       console.error("Error getting all filtered reports:", error);
+      throw error;
+    }
+  },
+
+  async checkDuplicateReport(date: Date, location: string) {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const q = query(
+        collection(db, REPORTS_COLLECTION),
+        where("location", "==", location),
+        where("report_date", ">=", Timestamp.fromDate(startOfDay)),
+        where("report_date", "<=", Timestamp.fromDate(endOfDay))
+      );
+
+      const querySnapshot = await getDocs(q);
+      return !querySnapshot.empty;
+    } catch (error) {
+      console.error("Error checking duplicate report:", error);
       throw error;
     }
   },
