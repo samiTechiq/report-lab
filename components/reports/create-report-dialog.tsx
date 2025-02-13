@@ -18,6 +18,7 @@ import { ReportFormValues } from "@/types/report";
 import { useQuery } from "@tanstack/react-query";
 import { supervisorService } from "@/lib/services/supervisor-service";
 import { ScrollArea } from "../ui/scroll-area";
+import { Plus } from "lucide-react";
 
 const formSteps = [
   { id: "basic", title: "Basic Information" },
@@ -71,6 +72,9 @@ export function CreateReportDialog() {
     queryFn: supervisorService.getSupervisors,
   });
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingAndAdding, setIsSubmittingAndAdding] = useState(false);
+
   const onSubmit = async (data: ReportFormValues) => {
     if (!user || !user.email) {
       toast({
@@ -82,7 +86,7 @@ export function CreateReportDialog() {
     }
 
     try {
-      // Check for duplicate report
+      setIsSubmitting(true);
       const reportDate =
         data.report_date instanceof Date
           ? data.report_date
@@ -101,17 +105,6 @@ export function CreateReportDialog() {
         });
         return;
       }
-
-      // If no duplicate, proceed with report creation
-      // const formattedData = {
-      //   ...data,
-      //   report_date:
-      //     data.report_date instanceof Date
-      //       ? data.report_date
-      //       : new Date(data.report_date),
-      //   recorded_by: user.email,
-      //   updated_by: user.email,
-      // };
 
       const formattedData = {
         ...data,
@@ -137,6 +130,68 @@ export function CreateReportDialog() {
         title: "Error",
         description: "Failed to create report. Please try again.",
       });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const onSubmitAndAddAnother = async (data: ReportFormValues) => {
+    if (!user || !user.email) {
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to create a report",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSubmittingAndAdding(true);
+      const reportDate =
+        data.report_date instanceof Date
+          ? data.report_date
+          : new Date(data.report_date);
+
+      const hasDuplicate = await reportService.checkDuplicateReport(
+        reportDate,
+        data.location
+      );
+
+      if (hasDuplicate) {
+        toast({
+          variant: "destructive",
+          title: "Duplicate Report",
+          description: "A report already exists for this date and location.",
+        });
+        return;
+      }
+
+      const formattedData = {
+        ...data,
+        report_date: new Date(data.report_date + "T12:00:00"),
+        recorded_by: user.email,
+        updated_by: user.email,
+      };
+
+      await reportService.createReport(formattedData);
+
+      toast({
+        title: "Success",
+        description: "Report created successfully",
+      });
+
+      // Reset form without closing modal or invalidating cache
+      form.reset();
+      setCurrentStep(0);
+    } catch (error) {
+      console.error("Error creating report:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to create report. Please try again.",
+      });
+    } finally {
+      setIsSubmittingAndAdding(false);
     }
   };
 
@@ -313,8 +368,8 @@ export function CreateReportDialog() {
           { name: "additional_kg" as const, label: "Additional KG" },
           { name: "kg_used" as const, label: "KG Used" },
           { name: "closing_kg" as const, label: "Closing KG" },
-          { name: "damage_kg" as const, label: "Damage KG" },
           { name: "each_kg_produced" as const, label: "Each KG Produced" },
+          { name: "damage_kg" as const, label: "Damage KG" },
         ].map((field) => (
           <div key={field.name}>
             <label
@@ -343,8 +398,8 @@ export function CreateReportDialog() {
           { name: "opening_bag" as const, label: "Opening Bags" },
           { name: "bag_produced" as const, label: "Bags Produced" },
           { name: "bag_sold" as const, label: "Bags Sold" },
-          { name: "missing_bag" as const, label: "Missing Bags" },
           { name: "closing_bag" as const, label: "Closing Bags" },
+          { name: "missing_bag" as const, label: "Missing Bags" },
         ].map((field) => (
           <div key={field.name}>
             <label
@@ -373,8 +428,8 @@ export function CreateReportDialog() {
           { name: "opening_stock" as const, label: "Opening Stock" },
           { name: "additional_stock" as const, label: "Additional Stock" },
           { name: "stock_used" as const, label: "Stock Used" },
-          { name: "damage_stock" as const, label: "Damage Stock" },
           { name: "closing_stock" as const, label: "Closing Stock" },
+          { name: "damage_stock" as const, label: "Damage Stock" },
           { name: "missing_stock" as const, label: "Missing Stock" },
         ].map((field) => (
           <div key={field.name}>
@@ -431,29 +486,45 @@ export function CreateReportDialog() {
               {currentStep === 3 && renderStockInfo()}
             </div>
           </ScrollArea>
-          <div className="flex justify-between pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={prevStep}
-              className={currentStep === 0 ? "invisible" : ""}
-            >
-              Previous
-            </Button>
-            {currentStep === formSteps.length - 1 ? (
-              <Button
-                type="button"
-                onClick={handleSubmit}
-                disabled={form.formState.isSubmitting}
-              >
-                {form.formState.isSubmitting ? "Creating..." : "Create Report"}
-              </Button>
-            ) : (
-              <Button type="button" onClick={nextStep}>
-                Next
-              </Button>
+          <DialogFooter className="flex justify-between">
+            <div className="flex gap-2">
+              {currentStep > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-sm"
+                  onClick={prevStep}
+                >
+                  Previous
+                </Button>
+              )}
+              {currentStep < formSteps.length - 1 && (
+                <Button type="button" className="text-sm" onClick={nextStep}>
+                  Next
+                </Button>
+              )}
+            </div>
+            {currentStep === formSteps.length - 1 && (
+              <div className="flex gap-2 mb-2">
+                <Button
+                  type="button"
+                  className="text-sm"
+                  onClick={form.handleSubmit(onSubmitAndAddAnother)}
+                  disabled={isSubmittingAndAdding || isSubmitting}
+                >
+                  {isSubmittingAndAdding ? "Saving..." : <> Save & add new</>}
+                </Button>
+                <Button
+                  type="submit"
+                  className="text-sm"
+                  onClick={form.handleSubmit(onSubmit)}
+                  disabled={isSubmitting || isSubmittingAndAdding}
+                >
+                  {isSubmitting ? "Saving..." : "Save"}
+                </Button>
+              </div>
             )}
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

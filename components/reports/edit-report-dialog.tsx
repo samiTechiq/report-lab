@@ -185,9 +185,9 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
                 required
               >
                 <option value="">Select location</option>
-                <option value="Oldsite">Oldsite</option>
-                <option value="Newsite">Newsite</option>
-                <option value="Extension">Extension</option>
+                <option value="oldsite">Oldsite</option>
+                <option value="newsite">Newsite</option>
+                <option value="extension">Extension</option>
               </select>
             </div>
             <div>
