@@ -428,9 +428,9 @@ export function CreateReportDialog() {
           { name: "opening_stock" as const, label: "Opening Stock" },
           { name: "additional_stock" as const, label: "Additional Stock" },
           { name: "stock_used" as const, label: "Stock Used" },
-          { name: "closing_stock" as const, label: "Closing Stock" },
           { name: "damage_stock" as const, label: "Damage Stock" },
           { name: "missing_stock" as const, label: "Missing Stock" },
+          { name: "closing_stock" as const, label: "Closing Stock" },
         ].map((field) => (
           <div key={field.name}>
             <label
