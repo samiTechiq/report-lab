@@ -92,19 +92,19 @@ export function CreateReportDialog() {
           ? data.report_date
           : new Date(data.report_date);
 
-      const hasDuplicate = await reportService.checkDuplicateReport(
-        reportDate,
-        data.location
-      );
+      // const hasDuplicate = await reportService.checkDuplicateReport(
+      //   reportDate,
+      //   data.location
+      // );
 
-      if (hasDuplicate) {
-        toast({
-          variant: "destructive",
-          title: "Duplicate Report",
-          description: "A report already exists for this date and location.",
-        });
-        return;
-      }
+      // if (hasDuplicate) {
+      //   toast({
+      //     variant: "destructive",
+      //     title: "Duplicate Report",
+      //     description: "A report already exists for this date and location.",
+      //   });
+      //   return;
+      // }
 
       const formattedData = {
         ...data,
