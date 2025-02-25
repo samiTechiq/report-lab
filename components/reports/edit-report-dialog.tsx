@@ -13,8 +13,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
 import { reportService } from "@/lib/report-service";
 import { downloadReportImage } from "@/lib/report-image-generator";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useState, useEffect } from "react";
+import { useForm, Controller } from "react-hook-form";
 import { Report, ReportFormValues } from "@/types/report";
 import { isAdminUser } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -58,9 +58,16 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 	const [open, setOpen] = useState(false);
 	const [currentStep, setCurrentStep] = useState(0);
 	const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+	const [pending, setPending] = useState(false);
 	const { user } = useAuth();
 	const queryClient = useQueryClient();
 	const { toast } = useToast();
+
+	// Format the date correctly for the input field
+	const formatDateForInput = (dateString: string | Date) => {
+		const date = new Date(dateString);
+		return date.toISOString().split("T")[0]; // Format as YYYY-MM-DD
+	};
 
 	const form = useForm<ReportFormValues>({
 		defaultValues: {
@@ -69,7 +76,25 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 				? new Date(report.report_date)
 				: new Date(),
 		},
+		mode: "onChange", // Validate on change for better user experience
 	});
+
+	// Make sure form values are properly loaded when the dialog opens
+	useEffect(() => {
+		if (open) {
+			// Use setValue to ensure all form values are properly set
+			Object.entries(report).forEach(([key, value]) => {
+				if (key === "report_date" && value) {
+					form.setValue(
+						key as keyof ReportFormValues,
+						new Date(value)
+					);
+				} else if (value !== undefined) {
+					form.setValue(key as keyof ReportFormValues, value);
+				}
+			});
+		}
+	}, [open, report, form]);
 
 	// Fetch supervisors for the select input
 	const { data: supervisors } = useQuery({
@@ -78,6 +103,7 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 	});
 
 	const onSubmit = async (data: ReportFormValues) => {
+		setPending(true);
 		try {
 			const formattedData = {
 				...data,
@@ -104,10 +130,13 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 				title: "Error",
 				description: "Failed to update report. Please try again.",
 			});
+		} finally {
+			setPending(false);
 		}
 	};
 
 	const handleDelete = async () => {
+		setPending(true);
 		try {
 			await reportService.deleteReport(report.id);
 			toast({
@@ -124,10 +153,13 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 				title: "Error",
 				description: "Failed to delete report. Please try again.",
 			});
+		} finally {
+			setPending(false);
 		}
 	};
 
 	const handleDownloadImage = async () => {
+		setPending(true);
 		try {
 			await downloadReportImage(report);
 			toast({
@@ -142,6 +174,8 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 				description:
 					"Failed to download report image. Please try again.",
 			});
+		} finally {
+			setPending(false);
 		}
 	};
 
@@ -167,11 +201,23 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 							>
 								Report Date
 							</label>
-							<input
-								type="date"
-								className="input-control"
-								{...form.register("report_date")}
-								required
+							<Controller
+								name="report_date"
+								control={form.control}
+								render={({ field }) => (
+									<input
+										type="date"
+										className="input-control"
+										value={formatDateForInput(field.value)}
+										onChange={(e) => {
+											const date = new Date(
+												e.target.value
+											);
+											field.onChange(date);
+										}}
+										required
+									/>
+								)}
 							/>
 						</div>
 						<div>
@@ -193,20 +239,7 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 								<option value="extension">Extension</option>
 							</select>
 						</div>
-						{/* <div>
-              <label
-                htmlFor="sales_rep"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Sales Representative
-              </label>
-              <input
-                type="text"
-                className="input-control"
-                {...form.register("sales_rep")}
-                required
-              />
-            </div> */}
+
 						<div>
 							<label
 								htmlFor="sales_rep"
@@ -588,7 +621,11 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 							<Button
 								type="button"
 								variant="outline"
-								onClick={prevFormStep}
+								onClick={() => {
+									// Save current step data before moving back
+									form.trigger();
+									prevFormStep();
+								}}
 								disabled={currentStep === 0}
 							>
 								<ArrowLeft />
@@ -596,12 +633,23 @@ export function EditReportDialog({ report }: EditReportDialogProps) {
 							{currentStep === formSteps.length - 1 ? (
 								<Button
 									type="submit"
+									disabled={pending}
 									onClick={form.handleSubmit(onSubmit)}
 								>
-									Save
+									update
 								</Button>
 							) : (
-								<Button type="button" onClick={nextFormStep}>
+								<Button
+									type="button"
+									onClick={() => {
+										// Validate current step before moving forward
+										form.trigger().then((isValid) => {
+											if (isValid) {
+												nextFormStep();
+											}
+										});
+									}}
+								>
 									<ArrowRight />
 								</Button>
 							)}

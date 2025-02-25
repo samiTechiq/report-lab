@@ -76,3 +76,14 @@ body {
     @apply px-2 py-2 border border-slate-300 block w-full rounded-md bg-white outline-none shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm;
   }
 }
+
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
