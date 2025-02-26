@@ -221,33 +221,25 @@ export function ReportAggregationDialog({
 					<BarChart3 className="h-4 w-4" />
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-w-[95vw] md:max-w-4xl max-h-[90vh] p-4 md:p-6 overflow-hidden">
+			<DialogContent className="max-w-[95vw] md:max-w-5xl max-h-[90vh] p-4 md:p-6 overflow-hidden overflow-y-auto scrollbar-hide">
 				<DialogHeader className="mb-4">
 					<DialogTitle>Aggregated Report Analysis</DialogTitle>
 					<DialogDescription>
-						<div className="flex gap-x-4 items-center">
-							{startDate && endDate
-								? `Summary of reports from ${new Date(
-										startDate
-								  ).toLocaleDateString()} to ${new Date(
-										endDate
-								  ).toLocaleDateString()}`
-								: startDate
-								? `Summary of reports from ${new Date(
-										startDate
-								  ).toLocaleDateString()} onwards`
-								: endDate
-								? `Summary of reports up to ${new Date(
-										endDate
-								  ).toLocaleDateString()}`
-								: "Summary of all reports"}
-							<ReportPdfExporter
-								reports={validReports}
-								startDate={startDate}
-								endDate={endDate}
-								isLoading={isLoading}
-							/>
-						</div>
+						{startDate && endDate
+							? `Summary of reports from ${new Date(
+									startDate
+							  ).toLocaleDateString()} to ${new Date(
+									endDate
+							  ).toLocaleDateString()}`
+							: startDate
+							? `Summary of reports from ${new Date(
+									startDate
+							  ).toLocaleDateString()} onwards`
+							: endDate
+							? `Summary of reports up to ${new Date(
+									endDate
+							  ).toLocaleDateString()}`
+							: "Summary of all reports"}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -264,6 +256,12 @@ export function ReportAggregationDialog({
 					</div>
 				) : (
 					<>
+						<ReportPdfExporter
+							reports={validReports}
+							startDate={startDate}
+							endDate={endDate}
+							isLoading={isLoading}
+						/>
 						<Tabs
 							defaultValue="location"
 							value={activeTab}
@@ -630,19 +628,6 @@ export function ReportAggregationDialog({
 								</ScrollArea>
 							</TabsContent>
 						</Tabs>
-
-						{/* PDF Export Button */}
-						<DialogFooter className="mt-4 sm:justify-between flex flex-col sm:flex-row gap-2">
-							<div className="text-sm text-muted-foreground">
-								{validReports.length} reports analyzed
-							</div>
-							<ReportPdfExporter
-								reports={validReports}
-								startDate={startDate}
-								endDate={endDate}
-								isLoading={isLoading}
-							/>
-						</DialogFooter>
 					</>
 				)}
 			</DialogContent>

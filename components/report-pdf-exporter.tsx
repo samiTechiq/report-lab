@@ -853,7 +853,7 @@ export function ReportPdfExporter({
 			disabled={isLoading || reports.length === 0}
 			onClick={generatePDF}
 			size="sm"
-			className="mt-2"
+			className="mt-0 w-56"
 		>
 			<Download className="h-4 w-4 mr-2" />
 			Export PDF Report
